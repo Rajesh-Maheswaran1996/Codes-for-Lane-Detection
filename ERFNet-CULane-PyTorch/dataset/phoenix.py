@@ -10,7 +10,7 @@ from torch.utils.data import Dataset
 def radial_gradient(shape, center = None, outer = 200, inner = 100, c1 = np.array([255,255,255]), c2=np.array([0,0,0])):
     i = np.indices(shape)
     z = np.dstack((i[0],i[1]))
-    if center == None:
+    if not center:
         center = np.array([shape[0]/2, shape[1]/2])
     d = np.linalg.norm(z-center, axis=2)
     d = np.minimum(np.maximum((d - inner)/(outer-inner), 0), 1)
@@ -24,10 +24,9 @@ def radial_gradient(shape, center = None, outer = 200, inner = 100, c1 = np.arra
 class PhoenixDataSet(Dataset):
     """Dataloader for our artifical road segmentation dataset
     """
-    def __init__(self, data_list, transforms=None, seg_mode='lane_segmentation', augment=False, preprocess=False,
-                 visualize=False, radial_mask=True, eval=False, transform=None):
+    def __init__(self, data_list, transform=None, seg_mode='lane_segmentation', visualize=False, radial_mask=False,
+                 eval=False):
         super(PhoenixDataSet, self).__init__()
-        self.transforms = transforms
         self.seg_mode = seg_mode
 
         self.seg_folder = 'semseg_color' if seg_mode == 'default' else 'lane_segmentation'
@@ -47,6 +46,9 @@ class PhoenixDataSet(Dataset):
         self.visualize = visualize
         self.radial_mask = radial_mask
         self.transform = transform
+
+        self.classes = all_classes if self.seg_mode == 'default' else lane_classes
+        self.height_crop = 0.5
 
     def check_existance(self):
         images_not_existing = []
@@ -83,14 +85,19 @@ class PhoenixDataSet(Dataset):
     def __getitem__(self, idx):
         img = cv2.imread(self.input_images[idx])
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            
+        H = int(img.shape[0] * self.height_crop)
+        W = img.shape[1]
+        img = img[H:, :, :]
 
         if self.eval:
             seg_img = None
         else:
-            seg_img = cv2.imread(self.input_images[idx], cv2.IMREAD_UNCHANGED)
+            seg_img = cv2.imread(self.input_images[idx].replace('rgb', self.seg_folder), cv2.IMREAD_UNCHANGED)
             trans_mask = seg_img[:, :, 3] == 0
             seg_img[trans_mask] = [0, 0, 0, 255]
             seg_img = cv2.cvtColor(seg_img, cv2.COLOR_BGRA2RGB)
+            seg_img = seg_img[H:, :, :]
 
         if self.radial_mask:
             scale = (img.shape[0]/512.)
@@ -105,55 +112,33 @@ class PhoenixDataSet(Dataset):
             if not self.eval:
                 seg_img = (seg_img.astype('float')*(d2.astype('float')/255.)).astype('uint8')
 
-        if self.visualize:
-            if not self.eval:
-                screen = cv2.cvtColor(seg_img, cv2.COLOR_RGB2BGR)
-                cv2.imshow('Test', screen)
-                cv2.waitKey()
-
-            screen = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-            cv2.imshow('Test', screen)
-            cv2.waitKey()
-
         print('Loading image {}'.format(self.input_images[idx]))
 
-        sample = {
-            'img': img,
-            'segLabel': seg_img,
-            'exist': None,
-            'img_name': '{}'.format(self.input_images[idx])
-        }
-
-        if self.transforms is not None:
-            sample = self.transforms(sample)
-
-        W = sample['img'].shape[0]
-        H = sample['img'].shape[1]
         # 0 -> first class is zero class
-        segMap = np.zeros((W, H), dtype=np.int)
-
-        classes = all_classes if self.seg_mode == 'default' else lane_classes
+        seg_map = np.zeros((H, W), dtype=np.int)
 
         if not self.eval:
-            for ix, color in enumerate(classes):
-                r = np.all((sample['segLabel'][:, :] == color), axis=2)
-                segMap[r] = ix
+            for ix, color in enumerate(self.classes):
+                r = np.all((seg_img[:H, :] == color), axis=2)
+                seg_map[r] = ix
 
-            sample['segLabel'] = segMap
+            print('Unique in sample: {}'.format(np.unique(seg_map)))
 
-            exist = np.zeros(len(classes), dtype=np.float32)
-            for ix in range(len(classes)):
-                exist[ix] = (segMap == ix).any()
-            sample['exist'] = exist
-            sample['segLabel'] = sample['segLabel'].squeeze()
-            print('Unique in sample: {}'.format(np.unique(sample['segLabel'])))
+        if self.visualize:
+            if not self.eval:
+                screen_seg = cv2.cvtColor(seg_img, cv2.COLOR_RGB2BGR)
+                cv2.imshow('Segmentation Map', screen_seg)
+
+            screen = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+            cv2.imshow('RGB Image', screen)
+            cv2.waitKey(0)
 
         if self.transform:
-            sample['img'], sample['segLabel'] = self.transform((sample['img'], sample['segLabel']))
+            img, seg_map = self.transform((img, seg_map))
 
         # no right outer lane
-        return torch.from_numpy(sample['img']).permute(2, 0, 1).contiguous().float(), \
-               torch.from_numpy(sample['segLabel']).contiguous().long(), np.array([1, 1, 1, 0])
+        return torch.from_numpy(img).permute(2, 0, 1).contiguous().float(), \
+               torch.from_numpy(seg_map).contiguous().long(), np.array([1, 1, 1, 0])
 
     def __len__(self):
         return len(self.input_images)
@@ -279,6 +264,7 @@ INTERSECTION_COLOR = (64, 128, 255)
 LANE_MARKING_RIGHT_SIDE = (51, 51, 51)
 LANE_MARKING_MIDDLE = (151, 151, 151)
 LANE_MARKING_LEFT_SIDE = (251, 251, 251)
+
 
 def convert_to_one_range(color):
     return (color[0]/255, color[1]/255, color[2]/255)
