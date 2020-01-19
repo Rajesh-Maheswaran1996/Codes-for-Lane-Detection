@@ -37,6 +37,9 @@ def main():
     elif args.dataset == 'CULane':
         num_class = 5
         ignore_label = 255
+    elif args.dataset == 'Phoenix':
+        num_class = 4  # 3 lanes and ignore label
+        ignore_label = 0
     else:
         raise ValueError('Unknown dataset ' + args.dataset)
 
@@ -89,7 +92,7 @@ def main():
         ])), batch_size=args.batch_size, shuffle=False, num_workers=args.workers, pin_memory=False)
 
     # define loss function (criterion) optimizer and evaluator
-    weights = [1.0 for _ in range(5)]
+    weights = [1.0 for _ in range(num_class)]
     weights[0] = 0.4
     class_weights = torch.FloatTensor(weights).cuda()
     criterion = torch.nn.NLLLoss(ignore_index=ignore_label, weight=class_weights).cuda()

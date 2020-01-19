@@ -150,7 +150,7 @@ class Lane_exist(nn.Module):
         self.layers_final.append(nn.Conv2d(32, 5, (1, 1), stride=1, padding=(0, 0), bias=True))
 
         self.maxpool = nn.MaxPool2d(2, stride=2)
-        self.linear1 = nn.Linear(3965, 128)
+        self.linear1 = nn.Linear(46080, 128)
         self.linear2 = nn.Linear(128, 4)
 
     def forward(self, input):
@@ -167,7 +167,7 @@ class Lane_exist(nn.Module):
         output = F.softmax(output, dim=1)
         output = self.maxpool(output)
         # print(output.shape)
-        output = output.view(-1, 3965)
+        output = output.view(-1, 46080)
         output = self.linear1(output)
         output = F.relu(output)
         output = self.linear2(output)
