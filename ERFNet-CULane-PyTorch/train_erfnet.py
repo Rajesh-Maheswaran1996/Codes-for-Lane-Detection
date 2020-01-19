@@ -102,6 +102,13 @@ def main():
 
     args.evaluate = True
 
+    save_checkpoint({
+        'epoch': 0,
+        'arch': args.arch,
+        'state_dict': model.state_dict(),
+        'best_mIoU': best_mIoU,
+    }, True)
+
     if args.evaluate:
         validate(val_loader, model, criterion, 0, evaluator)
         return
@@ -136,7 +143,7 @@ def train(train_loader, model, criterion, criterion_exist, optimizer, epoch):
     model.train()
 
     end = time.time()
-    for i, (input, target, target_exist) in enumerate(train_loader):
+    for i, (input, target, target_exist, _) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
 
@@ -194,7 +201,7 @@ def validate(val_loader, model, criterion, iter, evaluator, logger=None):
     model.eval()
 
     end = time.time()
-    for i, (input, target, target_exist) in enumerate(val_loader):
+    for i, (input, target, target_exist, _) in enumerate(val_loader):
         target = target.cuda()
         input_var = torch.autograd.Variable(input, volatile=True)
         target_var = torch.autograd.Variable(target)

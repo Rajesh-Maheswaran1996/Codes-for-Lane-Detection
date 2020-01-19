@@ -150,8 +150,9 @@ class Lane_exist(nn.Module):
         self.layers_final.append(nn.Conv2d(32, 5, (1, 1), stride=1, padding=(0, 0), bias=True))
 
         self.maxpool = nn.MaxPool2d(2, stride=2)
-        self.linear1 = nn.Linear(46080, 128)
-        self.linear2 = nn.Linear(128, 4)
+        # todo: hardcodes input size
+        self.linear1 = nn.Linear(3000, 128)
+        self.linear2 = nn.Linear(128, num_output)
 
     def forward(self, input):
         output = input
@@ -167,7 +168,8 @@ class Lane_exist(nn.Module):
         output = F.softmax(output, dim=1)
         output = self.maxpool(output)
         # print(output.shape)
-        output = output.view(-1, 46080)
+        # todo: hardcodes batch size
+        output = output.view(output.shape[0], 3000)
         output = self.linear1(output)
         output = F.relu(output)
         output = self.linear2(output)
@@ -185,9 +187,9 @@ class ERFNet(nn.Module):
         else:
             self.encoder = encoder
         self.decoder = Decoder(num_classes)
-        self.lane_exist = Lane_exist(4)  # num_output
-        self.input_mean = [103.939, 116.779, 123.68]  # [0, 0, 0]
-        self.input_std = [1, 1, 1]
+        self.lane_exist = Lane_exist(3)  # num_output HARDCODES LANE AMOUNT
+        self.input_mean = [103.939, 116.779, 123.68]  # [0, 0, 0] # todo: adjust to our dataset
+        self.input_std = [1, 1, 1] # todo: adjust to our dataset
 
     def train(self, mode=True):
         """
@@ -273,5 +275,5 @@ class ERFNet(nn.Module):
             return self.encoder.forward(input, predict=True)
         else:'''
         output = self.encoder(input)  # predict=False by default
-        return self.decoder.forward(output), self.lane_exist(output)
+        return self.decoder.forward(output), self.lane_exist.forward(output)
 

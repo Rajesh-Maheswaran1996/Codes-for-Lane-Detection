@@ -74,7 +74,7 @@ def main():
         ])), batch_size=args.batch_size, shuffle=False, num_workers=args.workers, pin_memory=False)
 
     # define loss function (criterion) optimizer and evaluator
-    weights = [1.0 for _ in range(5)]
+    weights = [1.0 for _ in range(num_class)]
     weights[0] = 0.4
     class_weights = torch.FloatTensor(weights).cuda()
     criterion = torch.nn.NLLLoss(ignore_index=ignore_label, weight=class_weights).cuda()
@@ -84,13 +84,14 @@ def main():
     evaluator = EvalSegmentation(num_class, ignore_label)
 
     ### evaluate ###
-    validate(test_loader, model, criterion, 0, evaluator)
+    validate(test_loader, model, criterion, 0, evaluator, num_class=num_class - 1, batch_size=args.batch_size)
     return
 
 
-def validate(val_loader, model, criterion, iter, evaluator, logger=None):
+def validate(val_loader, model, criterion, iter, evaluator, logger=None, num_class=4, batch_size=12):
 
     batch_time = AverageMeter()
+    image_time = AverageMeter()
     losses = AverageMeter()
     IoU = AverageMeter()
     mIoU = 0
@@ -99,16 +100,16 @@ def validate(val_loader, model, criterion, iter, evaluator, logger=None):
     model.eval()
 
     end = time.time()
-    for i, (input, target, img_name) in enumerate(val_loader):
+    for i, (input, target, _, img_name) in enumerate(val_loader):
 
-        input_var = torch.autograd.Variable(input, volatile=True)
+        with torch.no_grad():
+            input_var = torch.autograd.Variable(input)
 
-        # compute output
-        output, output_exist = model(input_var)
+            # compute output
+            output, output_exist = model(input_var)
 
-        # measure accuracy and record loss
-
-        output = F.softmax(output, dim=1)
+            # measure accuracy and record loss
+            output = F.softmax(output, dim=1)
 
         pred = output.data.cpu().numpy() # BxCxHxW
         pred_exist = output_exist.data.cpu().numpy() # BxO
@@ -118,7 +119,7 @@ def validate(val_loader, model, criterion, iter, evaluator, logger=None):
             if not os.path.exists(directory):
                 os.makedirs(directory)
             file_exist = open('predicts/vgg_SCNN_DULR_w9'+img_name[cnt].replace('.jpg', '.exist.txt'), 'w')
-            for num in range(4):
+            for num in range(num_class):
                 prob_map = (pred[cnt][num+1]*255).astype(int)
                 save_img = cv2.blur(prob_map,(9,9))
                 cv2.imwrite('predicts/vgg_SCNN_DULR_w9'+img_name[cnt].replace('.jpg', '_'+str(num+1)+'_avg.png'), save_img)
@@ -129,11 +130,16 @@ def validate(val_loader, model, criterion, iter, evaluator, logger=None):
             file_exist.close()
 
         # measure elapsed time
-        batch_time.update(time.time() - end)
+        final_time = time.time()
+        batch_time.update( (final_time - end))
+        image_time.update( (final_time - end) / batch_size)
         end = time.time()
 
         if (i + 1) % args.print_freq == 0:
-            print(('Test: [{0}/{1}]\t' 'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'.format(i, len(val_loader), batch_time=batch_time)))
+            print(('Test: [{0}/{1}]\t' 'Time {batch_time.val:.3f} ({batch_time.avg:.3f})'
+                   ' Per image:({image_time.val:.3f}) ({image_time.val:.3f})\t'.format(i, len(val_loader),
+                                                                                       batch_time=batch_time,
+                                                                                       image_time=image_time)))
 
     print('finished, #test:{}'.format(i) )
 

@@ -85,7 +85,7 @@ class PhoenixDataSet(Dataset):
     def __getitem__(self, idx):
         img = cv2.imread(self.input_images[idx])
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            
+
         H = int(img.shape[0] * self.height_crop)
         W = img.shape[1]
         img = img[H:, :, :]
@@ -112,7 +112,7 @@ class PhoenixDataSet(Dataset):
             if not self.eval:
                 seg_img = (seg_img.astype('float')*(d2.astype('float')/255.)).astype('uint8')
 
-        print('Loading image {}'.format(self.input_images[idx]))
+        # print('Loading image {}'.format(self.input_images[idx]))
 
         # 0 -> first class is zero class
         seg_map = np.zeros((H, W), dtype=np.int)
@@ -122,7 +122,7 @@ class PhoenixDataSet(Dataset):
                 r = np.all((seg_img[:H, :] == color), axis=2)
                 seg_map[r] = ix
 
-            print('Unique in sample: {}'.format(np.unique(seg_map)))
+            # print('Unique in sample: {}'.format(np.unique(seg_map)))
 
         if self.visualize:
             if not self.eval:
@@ -138,7 +138,7 @@ class PhoenixDataSet(Dataset):
 
         # no right outer lane
         return torch.from_numpy(img).permute(2, 0, 1).contiguous().float(), \
-               torch.from_numpy(seg_map).contiguous().long(), np.array([1, 1, 1, 0])
+               torch.from_numpy(seg_map).contiguous().long(), np.array([1, 1, 1, 0]), self.input_images[idx]
 
     def __len__(self):
         return len(self.input_images)
