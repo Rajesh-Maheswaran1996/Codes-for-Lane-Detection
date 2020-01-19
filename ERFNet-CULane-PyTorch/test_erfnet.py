@@ -10,7 +10,6 @@ import cv2
 import utils.transforms as tf
 import numpy as np
 import models
-from models import sync_bn
 import dataset as ds
 from options.options import parser
 import torch.nn.functional as F
@@ -39,6 +38,9 @@ def main():
     elif args.dataset == 'CULane':
         num_class = 5
         ignore_label = 255
+    elif args.dataset == 'Phoenix':
+        num_class = 4  # 3 lanes and ignore label
+        ignore_label = 0
     else:
         raise ValueError('Unknown dataset ' + args.dataset)
 

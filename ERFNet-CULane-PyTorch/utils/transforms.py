@@ -161,7 +161,8 @@ class GroupRandomScaleNew(object):
 
     def __call__(self, img_group):
         assert (len(self.interpolation) == len(img_group))
-        scale_w, scale_h = self.size[0] * 1.0 / 1640, self.size[1] * 1.0 / 350
+        # todo: refactor this, hardcodes image size from dataset
+        scale_w, scale_h = self.size[0] * 1.0 / 1280, self.size[1] * 1.0 / 480
         out_images = list()
         for img, interpolation in zip(img_group, self.interpolation):
             out_images.append(cv2.resize(img, None, fx=scale_w, fy=scale_h, interpolation=interpolation))
