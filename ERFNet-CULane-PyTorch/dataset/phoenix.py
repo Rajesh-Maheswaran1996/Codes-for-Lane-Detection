@@ -350,8 +350,8 @@ all_classes.append(SIGN_BASE_COLOR)
 all_classes.extend(SIGN_TO_COLOR.values())
 all_classes.append(INTERSECTION_COLOR)
 
-if __name__ == '__main__':
-    # pre-create the scaled-down images
+
+def save_dataset_rescaled():
     resave_loader = PhoenixDataSet('train_gt_phoenix_top', visualize=False, radial_mask=True, eval=False,
                                    reshape_size=250)
     for input, target, target_exist, image_name in tqdm(resave_loader):
@@ -371,4 +371,9 @@ if __name__ == '__main__':
         for ix, color in enumerate(resave_loader.classes):
             r = (target == ix)
             seg_map[r] = color
-        cv2.imwrite(image_name.replace('rgb', 'lane_segmentation_downscaled'), seg_map)
+        cv2.imwrite(image_name.replace('rgb', 'lane_segmentation_downscaled'), seg_map)s
+
+
+if __name__ == '__main__':
+    # pre-create the scaled-down images
+    save_dataset_rescaled()
