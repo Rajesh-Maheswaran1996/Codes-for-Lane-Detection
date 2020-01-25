@@ -48,7 +48,9 @@ class PhoenixDataSet(Dataset):
         self.transform = transform
 
         self.classes = all_classes if self.seg_mode == 'default' else lane_classes
-        self.height_crop = 0.5
+        self.height_crop = 1.0
+
+        self.center_crop = 200
 
     def check_existance(self):
         images_not_existing = []
@@ -111,6 +113,14 @@ class PhoenixDataSet(Dataset):
             img = (img.astype('float')*(d1.astype('float')/255.)).astype('uint8')
             if not self.eval:
                 seg_img = (seg_img.astype('float')*(d2.astype('float')/255.)).astype('uint8')
+
+        if self.center_crop:
+            H_center = int(H / 2)
+            W_center = int(W / 2)
+            seg_img = seg_img[H_center - int(self.center_crop/2) : H_center + int(self.center_crop/2),
+                              W_center - int(self.center_crop/2) : W_center + int(self.center_crop/2), :]
+            img = img[H_center - int(self.center_crop/2) : H_center + int(self.center_crop/2),
+                      W_center - int(self.center_crop/2) : W_center + int(self.center_crop/2), :]
 
         # print('Loading image {}'.format(self.input_images[idx]))
 
