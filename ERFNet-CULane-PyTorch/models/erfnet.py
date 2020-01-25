@@ -10,10 +10,10 @@ import torch.nn.functional as F
 
 
 class DownsamplerBlock(nn.Module):
-    def __init__(self, ninput, noutput):
+    def __init__(self, ninput, noutput, padding=0):
         super().__init__()
 
-        self.conv = nn.Conv2d(ninput, noutput - ninput, (3, 3), stride=2, padding=1, bias=True)
+        self.conv = nn.Conv2d(ninput, noutput - ninput, (3, 3), stride=2, padding=padding, bias=True)
         self.pool = nn.MaxPool2d(2, stride=2)
         self.bn = nn.BatchNorm2d(noutput, eps=1e-3)
 
@@ -64,16 +64,14 @@ class non_bottleneck_1d(nn.Module):
 class Encoder(nn.Module):
     def __init__(self, num_classes):
         super().__init__()
-        self.initial_block = DownsamplerBlock(3, 16)
+        self.initial_block = DownsamplerBlock(3, 16, padding=1)
 
         self.layers = nn.ModuleList()
-
         self.layers.append(DownsamplerBlock(16, 64))
 
         for x in range(0, 5):  # 5 times
             self.layers.append(non_bottleneck_1d(64, 0.1, 1))
-
-        self.layers.append(DownsamplerBlock(64, 128))
+        self.layers.append(DownsamplerBlock(64, 128, padding=1))
 
         for x in range(0, 2):  # 2 times
             self.layers.append(non_bottleneck_1d(128, 0.1, 2))
@@ -82,7 +80,7 @@ class Encoder(nn.Module):
             self.layers.append(non_bottleneck_1d(128, 0.1, 16))
 
         # only for encoder mode:
-        self.output_conv = nn.Conv2d(128, num_classes, 1, stride=1, padding=0, bias=True)
+        self.output_conv = nn.Conv2d(128, num_classes, 1, stride=1, padding=1, bias=True)
 
     def forward(self, input, predict=False):
         output = self.initial_block(input)
@@ -122,7 +120,7 @@ class Decoder(nn.Module):
         self.layers.append(non_bottleneck_1d(16, 0, 1))
         self.layers.append(non_bottleneck_1d(16, 0, 1))
 
-        self.output_conv = nn.ConvTranspose2d(16, num_classes, 2, stride=2, padding=0, output_padding=0, bias=True)
+        self.output_conv = nn.ConvTranspose2d(16, num_classes, 4, stride=2, padding=0, output_padding=0, bias=True)
 
     def forward(self, input):
         output = input
@@ -151,7 +149,7 @@ class Lane_exist(nn.Module):
 
         self.maxpool = nn.MaxPool2d(2, stride=2)
         # todo: hardcodes input size
-        self.linear1 = nn.Linear(3000, 128)
+        self.linear1 = nn.Linear(1125, 128)
         self.linear2 = nn.Linear(128, num_output)
 
     def forward(self, input):
@@ -169,7 +167,7 @@ class Lane_exist(nn.Module):
         output = self.maxpool(output)
         # print(output.shape)
         # todo: hardcodes batch size
-        output = output.view(output.shape[0], 3000)
+        output = output.view(output.shape[0], 1125)
         output = self.linear1(output)
         output = F.relu(output)
         output = self.linear2(output)
@@ -187,7 +185,7 @@ class ERFNet(nn.Module):
         else:
             self.encoder = encoder
         self.decoder = Decoder(num_classes)
-        self.lane_exist = Lane_exist(3)  # num_output HARDCODES LANE AMOUNT
+        self.lane_exist = Lane_exist(4)  # num_output HARDCODES LANE AMOUNT
         self.input_mean = [103.939, 116.779, 123.68]  # [0, 0, 0] # todo: adjust to our dataset
         self.input_std = [1, 1, 1] # todo: adjust to our dataset
 
@@ -275,5 +273,6 @@ class ERFNet(nn.Module):
             return self.encoder.forward(input, predict=True)
         else:'''
         output = self.encoder(input)  # predict=False by default
+        print('Encoder output shape ', output.shape)
         return self.decoder.forward(output), self.lane_exist.forward(output)
 
