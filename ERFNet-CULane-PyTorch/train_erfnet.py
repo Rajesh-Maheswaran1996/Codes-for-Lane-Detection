@@ -80,6 +80,7 @@ def main():
         getattr(ds, args.dataset.replace("CULane", "VOCAug") + 'DataSet')(data_list=args.train_list,
                                                                           seg_mode='lane_segmentation',
                                                                           visualize=False, radial_mask=False,
+                                                                          do_center_crop=False,
                  eval=False, reshape_size=250, transform=torchvision.transforms.Compose([
             # tf.GroupRandomScale(size=(0.595, 0.621), interpolation=(cv2.INTER_LINEAR, cv2.INTER_NEAREST)),
             tf.GroupRandomCropRatio(size=(args.img_width, args.img_height)),
@@ -91,6 +92,7 @@ def main():
         getattr(ds, args.dataset.replace("CULane", "VOCAug") + 'DataSet')(data_list=args.val_list,
                                                                           seg_mode='lane_segmentation',
                                                                           visualize=False, radial_mask=False,
+                                                                          do_center_crop=False,
                  eval=False, reshape_size=250, transform=torchvision.transforms.Compose([
             # tf.GroupRandomScale(size=(0.595, 0.621), interpolation=(cv2.INTER_LINEAR, cv2.INTER_NEAREST)),
             tf.GroupRandomCropRatio(size=(args.img_width, args.img_height)),

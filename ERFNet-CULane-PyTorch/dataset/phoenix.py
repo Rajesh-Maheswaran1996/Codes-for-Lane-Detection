@@ -30,7 +30,7 @@ class PhoenixDataSet(Dataset):
     """Dataloader for our artifical road segmentation dataset
     """
     def __init__(self, data_list, transform=None, seg_mode='lane_segmentation', visualize=True, radial_mask=True,
-                 eval=False, reshape_size=250):
+                 eval=False, reshape_size=250, do_center_crop=False):
         super(PhoenixDataSet, self).__init__()
         self.seg_mode = seg_mode
 
@@ -56,7 +56,7 @@ class PhoenixDataSet(Dataset):
         self.height_crop = None
 
         self.reshape_size = reshape_size
-        self.do_center_crop = True
+        self.do_center_crop = do_center_crop
 
     def check_existance(self):
         images_not_existing = []
