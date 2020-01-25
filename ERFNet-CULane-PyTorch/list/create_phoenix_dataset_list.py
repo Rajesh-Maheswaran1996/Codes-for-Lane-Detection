@@ -3,7 +3,7 @@ import os
 from dataset.phoenix import save_dataset_rescaled
 
 
-BASE_PATH = '/media/mykyta/My Passport/phoenix/drive_sim_road_generation/'
+BASE_PATH = '/data_2/synthetic_data/rendered_scenes/new_cameras'
 TEST_SPLIT = 0.8
 # choose from top or realsense camera
 CAMERA = 'top'
@@ -13,8 +13,8 @@ RGB_PREFIX = 'rgb_downscaled' if DOWNSCALED else 'rgb'
 
 
 def write_image_lists(camera=CAMERA, rgb_prefix='rgb_downscaled'):
-    with open('./train_gt_phoenix_{}.txt'.format(camera), 'w+') as train_file, \
-            open('./val_gt_phoenix_{}.txt'.format(camera), 'w+') as val_file:
+    with open('./list/train_gt_phoenix_{}.txt'.format(camera), 'w+') as train_file, \
+            open('./list/val_gt_phoenix_{}.txt'.format(camera), 'w+') as val_file:
         for folder in glob(os.path.join(BASE_PATH, '*')):
             print('Adding images from folder {}'.format(folder))
             images_in_set = glob(os.path.join(folder, camera, rgb_prefix, '*'))

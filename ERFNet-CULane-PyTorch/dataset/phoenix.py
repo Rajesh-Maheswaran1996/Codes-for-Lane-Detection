@@ -108,9 +108,12 @@ class PhoenixDataSet(Dataset):
         else:
             print('Loading segmentation image {}'.format(self.input_images[idx].replace('rgb', self.seg_folder)))
             seg_img = cv2.imread(self.input_images[idx].replace('rgb', self.seg_folder), cv2.IMREAD_UNCHANGED)
-            trans_mask = seg_img[:, :, 3] == 0
-            seg_img[trans_mask] = [0, 0, 0, 255]
-            seg_img = cv2.cvtColor(seg_img, cv2.COLOR_BGRA2RGB)
+            if seg_img.shape[2] == 4:            
+                trans_mask = seg_img[:, :, 3] == 0
+                seg_img[trans_mask] = [0, 0, 0, 255]
+                seg_img = cv2.cvtColor(seg_img, cv2.COLOR_BGRA2RGB)
+            else:
+                seg_img = cv2.cvtColor(seg_img, cv2.COLOR_BGR2RGB)
             if self.height_crop is not None:
                 seg_img = seg_img[H:, :, :]
 
@@ -364,14 +367,14 @@ def save_dataset_rescaled():
                 image_name.replace('rgb', 'lane_segmentation_downscaled')))
 
         input = input.permute((1, 2, 0)).numpy()
-        input = cv2.cvtColor(input, cv2.COLOR_RGB2BGRA)
+        input = cv2.cvtColor(input, cv2.COLOR_RGB2BGR)
         cv2.imwrite(new_image_name, input)
         target = target.numpy()
         seg_map = np.zeros((target.shape[0], target.shape[1], 3), dtype=np.int)
         for ix, color in enumerate(resave_loader.classes):
             r = (target == ix)
             seg_map[r] = color
-        cv2.imwrite(image_name.replace('rgb', 'lane_segmentation_downscaled'), seg_map)s
+        cv2.imwrite(image_name.replace('rgb', 'lane_segmentation_downscaled'), seg_map)
 
 
 if __name__ == '__main__':

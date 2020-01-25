@@ -273,6 +273,5 @@ class ERFNet(nn.Module):
             return self.encoder.forward(input, predict=True)
         else:'''
         output = self.encoder(input)  # predict=False by default
-        print('Encoder output shape ', output.shape)
         return self.decoder.forward(output), self.lane_exist.forward(output)
 
