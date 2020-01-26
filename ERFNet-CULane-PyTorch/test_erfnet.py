@@ -68,7 +68,7 @@ def main():
     # Data loading code
 
     test_loader = torch.utils.data.DataLoader(
-        getattr(ds, args.dataset.replace("CULane", "VOCAug") + 'DataSet')(data_list=args.val_list, transform=torchvision.transforms.Compose([
+        getattr(ds, args.dataset.replace("CULane", "VOCAug") + 'DataSet')(data_list=args.val_list, visualize=False, transform=torchvision.transforms.Compose([
             tf.GroupRandomCropRatio(size=(args.img_width, args.img_height)),
             tf.GroupNormalize(mean=(input_mean, (0, )), std=(input_std, (1, ))),
         ])), batch_size=args.batch_size, shuffle=False, num_workers=args.workers, pin_memory=False)
