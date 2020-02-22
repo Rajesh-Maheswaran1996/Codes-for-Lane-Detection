@@ -12,6 +12,7 @@ import numpy as np
 import models
 import dataset as ds
 from options.options import parser
+from models.discriminator import NLayerDiscriminator
 
 best_mIoU = 0
 
@@ -76,28 +77,37 @@ def main():
     cudnn.fastest = True
 
     # Data loading code
-    train_loader = torch.utils.data.DataLoader(
-        getattr(ds, args.dataset.replace("CULane", "VOCAug") + 'DataSet')(data_list=args.train_list,
-                                                                          seg_mode='lane_segmentation',
-                                                                          visualize=False, radial_mask=False,
-                                                                          do_center_crop=False,
-                 eval=False, reshape_size=250, transform=torchvision.transforms.Compose([
-            # tf.GroupRandomScale(size=(0.595, 0.621), interpolation=(cv2.INTER_LINEAR, cv2.INTER_NEAREST)),
-            tf.GroupRandomCropRatio(size=(args.img_width, args.img_height)),
-            tf.GroupRandomRotation(degree=(-1, 1), interpolation=(cv2.INTER_LINEAR, cv2.INTER_NEAREST), padding=(input_mean, (ignore_label, ))),
-            tf.GroupNormalize(mean=(input_mean, (0, )), std=(input_std, (1, ))),
-        ])), batch_size=args.batch_size, shuffle=True, num_workers=args.workers, pin_memory=False, drop_last=True)
+    train_dataset = getattr(ds, args.dataset.replace("CULane", "VOCAug") + 'DataSet')(data_list=args.train_list,
+                                                                                      transform=train_transform)
+    input_mean = train_dataset.input_mean
+    input_std = train_dataset.input_std
 
-    val_loader = torch.utils.data.DataLoader(
-        getattr(ds, args.dataset.replace("CULane", "VOCAug") + 'DataSet')(data_list=args.val_list,
-                                                                          seg_mode='lane_segmentation',
-                                                                          visualize=False, radial_mask=False,
-                                                                          do_center_crop=False,
-                 eval=False, reshape_size=250, transform=torchvision.transforms.Compose([
-            # tf.GroupRandomScale(size=(0.595, 0.621), interpolation=(cv2.INTER_LINEAR, cv2.INTER_NEAREST)),
+    train_transform = torchvision.transforms.Compose([tf.GroupRandomScale(size=(0.595, 0.621), interpolation=(
+                                                                                              cv2.INTER_LINEAR,
+                                                                                              cv2.INTER_NEAREST)),
+                                                                          tf.GroupRandomCropRatio(
+                                                                              size=(args.img_width, args.img_height)),
+                                                                          tf.GroupRandomRotation(degree=(-1, 1),
+                                                                                                 interpolation=(
+                                                                                                 cv2.INTER_LINEAR,
+                                                                                                 cv2.INTER_NEAREST),
+                                                                                                 padding=(input_mean, (
+                                                                                                 ignore_label,))),
+                                                                          tf.GroupNormalize(mean=(input_mean, (0,)),
+                                                                                            std=(input_std, (1,))),
+                                                                      ])
+
+    # Data loading code
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
+                                               num_workers=args.workers, pin_memory=False, drop_last=True)
+    val_transform = torchvision.transforms.Compose([
+            tf.GroupRandomScale(size=(0.595, 0.621), interpolation=(cv2.INTER_LINEAR, cv2.INTER_NEAREST)),
             tf.GroupRandomCropRatio(size=(args.img_width, args.img_height)),
             tf.GroupNormalize(mean=(input_mean, (0, )), std=(input_std, (1, ))),
-        ])), batch_size=args.batch_size, shuffle=False, num_workers=args.workers, pin_memory=False)
+        ])
+    val_dataset = getattr(ds, args.dataset.replace("CULane", "VOCAug") + 'DataSet')(data_list=args.val_list, transform=val_transform)
+    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers, pin_memory=False)
+
 
     # define loss function (criterion) optimizer and evaluator
     weights = [1.0 for _ in range(num_class)]
@@ -137,6 +147,84 @@ def main():
                 'state_dict': model.state_dict(),
                 'best_mIoU': best_mIoU,
             }, is_best)
+
+
+def train_domain_adversarial(train_loader_source, train_loader_target, model, criterion, criterion_exist, optimizer,
+                             epoch, adversarial_feature_maps, num_input_channels):
+    batch_time = AverageMeter()
+    data_time = AverageMeter()
+    losses = AverageMeter()
+    losses_exist = AverageMeter()
+
+    # todo: check whether needs logits, probably it's not logits actually
+    criterion_discriminator = torch.nn.BCEWithLogitsLoss().cuda()
+    losses_discriminator_source = AverageMeter()
+    losses_discriminator_target = AverageMeter()
+
+    latent_discriminator = NLayerDiscriminator(num_input_channels)
+    upscaling_model = ReconstructionNetwork()
+
+    # switch to train mode
+    model.train()
+
+    end = time.time()
+    for i, (input, target, target_exist, _, input_target) in enumerate(zip(train_loader_source, train_loader_target)):
+        # measure data loading time
+        data_time.update(time.time() - end)
+
+        target = target.cuda()
+        target_exist = target_exist.float().cuda()
+        input_var = torch.autograd.Variable(input)
+        target_var = torch.autograd.Variable(target)
+        target_exist_var = torch.autograd.Variable(target_exist)
+        input_var_target = torch.autograd.Variable(input_target)
+
+        # compute output
+        output, output_exist = model(input_var)  # output_mid
+        loss = criterion(torch.nn.functional.log_softmax(output, dim=1), target_var)
+        # print(output_exist.data.cpu().numpy().shape)
+        loss_exist = criterion_exist(output_exist, target_exist_var)
+        loss_tot = loss + loss_exist * 0.1
+
+        # losses for the feature discriminator
+        source_feature_map = model[adversarial_feature_maps](input_var)
+        target_feature_map = model[adversarial_feature_maps](input_var_target)
+        source_upscaled = upscaling_model(source_feature_map)
+        target_upscaled = upscaling_model(target_feature_map)
+        source_classification = latent_discriminator(source_upscaled)
+        target_classification = latent_discriminator(target_upscaled)
+
+        source_gt = torch.ones(source_classification.shape, dtype=torch.float64, device=cuda0)
+        target_gt = torch.zeros(target_classification.shape, dtype=torch.float64, device=cuda0)
+        loss_source_discriminator = criterion_discriminator(source_classification, source_gt)
+        loss_target_discriminator = criterion_discriminator(target_classification, target_gt)
+        loss_generator_source = criterion_discriminator(source_classification, target_gt)
+        loss_generator_target = criterion_discriminator(target_classification, source_gt)
+
+        # measure accuracy and record loss
+        losses.update(loss.data.item(), input.size(0))
+        losses_exist.update(loss_exist.item(), input.size(0))
+
+        losses_discriminator_source.update(loss_discriminator_source.item(), item.size(0))
+        losses_discriminator_target.update(loss_discriminator_target.item(), input)
+
+        # compute gradient and do SGD step
+        optimizer.zero_grad()
+        loss_tot.backward()
+        optimizer.step()
+
+        # measure elapsed time
+        batch_time.update(time.time() - end)
+        end = time.time()
+
+        if (i + 1) % args.print_freq == 0:
+            print((
+                      'Epoch: [{0}][{1}/{2}], lr: {lr:.5f}\t' 'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t' 'Data {data_time.val:.3f} ({data_time.avg:.3f})\t' 'Loss {loss.val:.4f} ({loss.avg:.4f})\t' 'Loss_exist {loss_exist.val:.4f} ({loss_exist.avg:.4f})\t'.format(
+                          epoch, i, len(train_loader), batch_time=batch_time, data_time=data_time, loss=losses,
+                          loss_exist=losses_exist, lr=optimizer.param_groups[-1]['lr'])))
+            batch_time.reset()
+            data_time.reset()
+            losses.reset()
 
 
 def train(train_loader, model, criterion, criterion_exist, optimizer, epoch):
