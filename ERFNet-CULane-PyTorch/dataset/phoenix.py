@@ -1,34 +1,36 @@
--import json
-import os
-
-import cv2
-import numpy as np
-import torch
-from torch.utils.data import Dataset
-import logging
-import math
 from tqdm import tqdm
+import math
+import logging
+from torch.utils.data import Dataset
+import torch
+import numpy as np
+import cv2
+import os
+import json
+from glob import glob
+
 
 LOGGER = logging.getLogger(__name__)
 
 
-def radial_gradient(shape, center = None, outer = 200, inner = 100, c1 = np.array([255,255,255]), c2=np.array([0,0,0])):
+def radial_gradient(shape, center=None, outer=200, inner=100, c1=np.array([255, 255, 255]), c2=np.array([0, 0, 0])):
     i = np.indices(shape)
-    z = np.dstack((i[0],i[1]))
+    z = np.dstack((i[0], i[1]))
     if not center:
         center = np.array([shape[0]/2, shape[1]/2])
     d = np.linalg.norm(z-center, axis=2)
     d = np.minimum(np.maximum((d - inner)/(outer-inner), 0), 1)
-    d = np.tile(d.reshape((shape[0], shape[1], 1)), (1,1,3))
+    d = np.tile(d.reshape((shape[0], shape[1], 1)), (1, 1, 3))
 
     d = d*(c2-c1)+c1
-    d=d.astype('uint8')
+    d = d.astype('uint8')
     return d
 
 
 class PhoenixDataSet(Dataset):
     """Dataloader for our artifical road segmentation dataset
     """
+
     def __init__(self, data_list, transform=None, seg_mode='lane_segmentation', visualize=True, radial_mask=True,
                  eval=False, reshape_size=250, do_center_crop=False):
         super(PhoenixDataSet, self).__init__()
@@ -36,15 +38,16 @@ class PhoenixDataSet(Dataset):
 
         self.seg_folder = 'semseg_color' if seg_mode == 'default' else 'lane_segmentation'
 
-        self.seg_classes = len(all_classes) if seg_mode == 'default' else len(lane_classes)
-
         self.input_images = []
         with open(os.path.join('list', data_list + '.txt')) as data_file:
             self.input_images = data_file.read().splitlines()
 
+        self.name = data_list
+
         self.eval = eval
         if not self.eval:
-            self.seg_images = [image.replace('rgb', self.seg_folder) for image in self.input_images]
+            self.seg_images = [image.replace(
+                'rgb', self.seg_folder) for image in self.input_images]
 
         self.check_existance()
 
@@ -57,6 +60,10 @@ class PhoenixDataSet(Dataset):
 
         self.reshape_size = reshape_size
         self.do_center_crop = do_center_crop
+
+        # from the original dataset, used during training
+        self.mean = [103.939, 116.779, 123.68]
+        self.std = [1, 1, 1]
 
     def check_existance(self):
         images_not_existing = []
@@ -77,7 +84,8 @@ class PhoenixDataSet(Dataset):
                 except ValueError:
                     pass
                 try:
-                    self.seg_images.remove(image.replace('rgb', 'semseg_color'))
+                    self.seg_images.remove(
+                        image.replace('rgb', 'semseg_color'))
                 except ValueError:
                     pass
             else:
@@ -86,13 +94,14 @@ class PhoenixDataSet(Dataset):
                 except ValueError:
                     pass
                 try:
-                    self.input_images.remove(image.replace('semseg_color', 'rgb'))
+                    self.input_images.remove(
+                        image.replace('semseg_color', 'rgb'))
                 except ValueError:
                     pass
 
     def __getitem__(self, idx):
         img = cv2.imread(self.input_images[idx])
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        #img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
         H = img.shape[0]
         W = img.shape[1]
@@ -101,14 +110,16 @@ class PhoenixDataSet(Dataset):
             img = img[H:, :, :]
 
         LOGGER.warn('Loading image: {} and segmentation image: {}'.format(self.input_images[idx],
-                    self.input_images[idx].replace('rgb', self.seg_folder)))
+                                                                          self.input_images[idx].replace('rgb', self.seg_folder)))
 
         if self.eval:
             seg_img = None
         else:
-            print('Loading segmentation image {}'.format(self.input_images[idx].replace('rgb', self.seg_folder)))
-            seg_img = cv2.imread(self.input_images[idx].replace('rgb', self.seg_folder), cv2.IMREAD_UNCHANGED)
-            if seg_img.shape[2] == 4:            
+            print('Loading segmentation image {}'.format(
+                self.input_images[idx].replace('rgb', self.seg_folder)))
+            seg_img = cv2.imread(self.input_images[idx].replace(
+                'rgb', self.seg_folder), cv2.IMREAD_UNCHANGED)
+            if seg_img.shape[2] == 4:
                 trans_mask = seg_img[:, :, 3] == 0
                 seg_img[trans_mask] = [0, 0, 0, 255]
                 seg_img = cv2.cvtColor(seg_img, cv2.COLOR_BGRA2RGB)
@@ -118,14 +129,18 @@ class PhoenixDataSet(Dataset):
                 seg_img = seg_img[H:, :, :]
 
         if self.radial_mask:
-            scale = (img.shape[0]/512.)
+            # scale = (img.shape[0]/512.)
 
-            r = (512/2 - 50)*scale
-            outer = r
-            inner = r - 15*scale
+            # r = (512/2 - 50)*scale
+            # outer = r
+            # inner = r - 15*scale
+            outer = 1210
+            inner = 1100
 
-            d1 = radial_gradient((img.shape[0], img.shape[1]), outer=outer, inner=inner)
-            d2 = radial_gradient((img.shape[0], img.shape[1]), outer=inner+1, inner=inner)
+            d1 = radial_gradient(
+                (img.shape[0], img.shape[1]), outer=outer, inner=inner)
+            d2 = radial_gradient(
+                (img.shape[0], img.shape[1]), outer=inner+1, inner=inner)
 
             if self.visualize:
                 screen_original = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
@@ -133,7 +148,8 @@ class PhoenixDataSet(Dataset):
 
             img = (img.astype('float')*(d1.astype('float')/255.)).astype('uint8')
             if not self.eval:
-                seg_img = (seg_img.astype('float')*(d2.astype('float')/255.)).astype('uint8')
+                seg_img = (seg_img.astype('float') *
+                           (d2.astype('float')/255.)).astype('uint8')
 
             if self.visualize:
                 screen_mask = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
@@ -158,7 +174,8 @@ class PhoenixDataSet(Dataset):
 
         if self.reshape_size is not None:
             img = cv2.resize(img, (self.reshape_size, self.reshape_size))
-            seg_img = cv2.resize(seg_img, (self.reshape_size, self.reshape_size))
+            seg_img = cv2.resize(
+                seg_img, (self.reshape_size, self.reshape_size))
             H = self.reshape_size
             W = self.reshape_size
 
@@ -184,7 +201,8 @@ class PhoenixDataSet(Dataset):
 
         # no right outer lane
         return torch.from_numpy(img).permute(2, 0, 1).contiguous().float(), \
-               torch.from_numpy(seg_map).contiguous().long(), np.array([1, 1, 1, 0]), self.input_images[idx]
+            torch.from_numpy(seg_map).contiguous().long(), np.array(
+            [1, 1, 1, 0]), self.input_images[idx]
 
     def __len__(self):
         return len(self.input_images)
@@ -219,13 +237,87 @@ class PhoenixDataSet(Dataset):
 
     @staticmethod
     def get_weights(seg_mode):
-        return [1.]*len(all_classes) if seg_mode == 'default' else [0.4,1,1,1]
+        return [1.]*len(all_classes) if seg_mode == 'default' else [0.4, 1, 1, 1]
+
+
+class RealPhoenixDataSet(Dataset):
+    """Dataloader for our real-world road segmentation dataset
+    """
+
+    def __init__(self, data_list, seg_mode='lane_segmentation', visualize=True, radial_mask=True,
+                 eval=False, reshape_size=250, do_center_crop=False):
+        super(RealPhoenixDataSet, self).__init__()
+        self.seg_mode = seg_mode
+        self.eval = True
+        self.visualize = visualize
+        self.transform = None
+        self.classes = all_classes if self.seg_mode == 'default' else lane_classes
+        self.center_crop_size = 1270  # approximate size of the lens region in image
+        self.reshape_size = reshape_size
+        self.mean = [0.09157813, 0.09577893, 0.09694287]
+        self.std = [0.09139383, 0.10574092, 0.1083417]
+        self.name = os.path.basename(data_list)
+
+        self.images = glob(os.path.join(data_list, '*'))
+        # self.calc_dataset_mean_and_std()
+
+    def calc_dataset_mean_and_std(self):
+        pixel_num = 0  # store all pixel number in the dataset
+        channel_sum = np.zeros(3)
+        channel_sum_squared = np.zeros(3)
+
+        for image_path in tqdm(self.images):
+            # image in M*N*CHANNEL_NUM shape, channel in BGR order
+            im = cv2.imread(image_path)
+            im = im/255.0
+            pixel_num += (im.size/3)
+            channel_sum += np.sum(im, axis=(0, 1))
+            channel_sum_squared += np.sum(np.square(im), axis=(0, 1))
+
+        # in BGR shape
+        self.mean = channel_sum / pixel_num
+        self.std = np.sqrt(channel_sum_squared /
+                           pixel_num - np.square(self.mean))
+        print('Dataset mean: {}, Dataset std: {}'.format(self.mean, self.std))
+
+    def set_transform(self, transform):
+        self.transform = transform
+
+    def __getitem__(self, idx):
+        image = cv2.imread(self.images[idx])
+        img_name = os.path.basename(self.images[idx])
+        # print('Image shape: ', image.shape)
+        if self.transform is not None:
+            return (self.transform(self.crop_image(image)), img_name)
+        else:
+            return (self.crop_image(image), img_name)
+
+    @staticmethod
+    def collate(batch):
+        img = np.stack([b for b in batch])
+
+    def crop_image(self, image):
+        cropped_image = image[int((image.shape[0]-self.center_crop_size)/2): int((image.shape[0]+self.center_crop_size)/2),
+                              int((image.shape[1]-self.center_crop_size)/2): int((image.shape[1]+self.center_crop_size)/2), :]
+        rescaled_image = cv2.resize(
+            cropped_image, (self.reshape_size, self.reshape_size))
+        return rescaled_image.transpose((2, 0, 1)).astype(np.float32)
+
+    def __len__(self):
+        return len(self.images)
+
+    @staticmethod
+    def get_colors(seg_mode):
+        return all_classes if seg_mode == 'default' else lane_classes
+
+    @staticmethod
+    def get_weights(seg_mode):
+        return [1.]*len(all_classes) if seg_mode == 'default' else [0.4, 1, 1, 1]
 
 
 LANE_MARKING_SEGMENTATION_COLOR = (128, 0, 0)
 BLOCKED_AREA_SEGMENTATION_COLOR = (0, 128, 0)
 # pedestrian island currently not segmented, could do in the future
-# PEDESTRIAN_ISLAND_COLOR = (0, 0, 128)
 DRIVABLE_AREA_SEGMENTATION_COLOR = (0, 255, 0)
 STOPLINE_SEGMENTATION_COLOR = (0, 255, 255)
 STOPLINE_DASHED_SEGMENTATION_COLOR = (255, 255, 0)
@@ -243,27 +335,26 @@ RAMP_COLOR = (0, 100, 0)
 # generated by :
 # TRAFFIC_MARKING_SEGMENTATION_COLORS = {marking: (255 - 8 * i, 8 * i, 8 * i) for i, marking in
 #                                        enumerate(ROADMARKING_TYPE_TO_VISUAL.keys())}
-TRAFFIC_MARKING_SEGMENTATION_COLORS = \
-    {'10_zone_beginn': (255, 0, 0),
-     '20_zone_beginn': (247, 8, 8),
-     'stvo-274.1': (239, 16, 16),
-     '40_zone_beginn': (231, 24, 24),
-     '50_zone_beginn': (223, 32, 32),
-     '60_zone_beginn': (215, 40, 40),
-     '70_zone_beginn': (207, 48, 48),
-     '80_zone_beginn': (199, 56, 56),
-     '90_zone_beginn': (191, 64, 64),
-     'ende_10_zone': (183, 72, 72),
-     'ende_20_zone': (175, 80, 80),
-     'stvo-274.2': (167, 88, 88),
-     'ende_40_zone': (159, 96, 96),
-     'ende_50_zone': (151, 104, 104),
-     'ende_60_zone': (143, 112, 112),
-     'ende_70_zone': (135, 120, 120),
-     'ende_80_zone': (127, 128, 128),
-     'ende_90_zone': (119, 136, 136),
-     'turn_left': (111, 144, 144),
-     'turn_right': (103, 152, 152)}
+TRAFFIC_MARKING_SEGMENTATION_COLORS = {'10_zone_beginn': (255, 0, 0),
+                                       '20_zone_beginn': (247, 8, 8),
+                                       'stvo-274.1': (239, 16, 16),
+                                       '40_zone_beginn': (231, 24, 24),
+                                       '50_zone_beginn': (223, 32, 32),
+                                       '60_zone_beginn': (215, 40, 40),
+                                       '70_zone_beginn': (207, 48, 48),
+                                       '80_zone_beginn': (199, 56, 56),
+                                       '90_zone_beginn': (191, 64, 64),
+                                       'ende_10_zone': (183, 72, 72),
+                                       'ende_20_zone': (175, 80, 80),
+                                       'stvo-274.2': (167, 88, 88),
+                                       'ende_40_zone': (159, 96, 96),
+                                       'ende_50_zone': (151, 104, 104),
+                                       'ende_60_zone': (143, 112, 112),
+                                       'ende_70_zone': (135, 120, 120),
+                                       'ende_80_zone': (127, 128, 128),
+                                       'ende_90_zone': (119, 136, 136),
+                                       'turn_left': (111, 144, 144),
+                                       'turn_right': (103, 152, 152)}
 
 SIGN_BASE_COLOR = (200, 100, 0)
 
@@ -272,37 +363,37 @@ SIGN_BASE_COLOR = (200, 100, 0)
 # SIGN_TO_COLOR = {marking: (7 * i, 255 - 7 * i, 7 * i) for i, marking in
 #                  enumerate(SIGN_MESHES.keys())}
 SIGN_TO_COLOR = {'10_zone_beginn': (0, 255, 0),
- '20_zone_beginn': (7, 248, 7),
- '40_zone_beginn': (14, 241, 14),
- '50_zone_beginn': (21, 234, 21),
- '60_zone_beginn': (28, 227, 28),
- '70_zone_beginn': (35, 220, 35),
- '80_zone_beginn': (42, 213, 42),
- '90_zone_beginn': (49, 206, 49),
- 'ende_10_zone': (56, 199, 56),
- 'ende_20_zone': (63, 192, 63),
- 'ende_40_zone': (70, 185, 70),
- 'ende_50_zone': (77, 178, 77),
- 'ende_60_zone': (84, 171, 84),
- 'ende_70_zone': (91, 164, 91),
- 'ende_80_zone': (98, 157, 98),
- 'ende_90_zone': (105, 150, 105),
- 'stvo-108-10': (112, 143, 112),
- 'stvo-110-10': (119, 136, 119),
- 'stvo-205': (126, 129, 126),
- 'stvo-206': (133, 122, 133),
- 'stvo-208': (140, 115, 140),
- 'stvo-209-10': (147, 108, 147),
- 'stvo-209-20': (154, 101, 154),
- 'stvo-222': (161, 94, 161),
- 'stvo-274.1': (168, 87, 168),
- 'stvo-274.2': (175, 80, 175),
- 'stvo-306': (182, 73, 182),
- 'stvo-350-10': (189, 66, 189),
- 'stvo-625-10': (196, 59, 196),
- 'stvo-625-11': (203, 52, 203),
- 'stvo-625-20': (210, 45, 210),
- 'stvo-625-21': (217, 38, 217)}
+                 '20_zone_beginn': (7, 248, 7),
+                 '40_zone_beginn': (14, 241, 14),
+                 '50_zone_beginn': (21, 234, 21),
+                 '60_zone_beginn': (28, 227, 28),
+                 '70_zone_beginn': (35, 220, 35),
+                 '80_zone_beginn': (42, 213, 42),
+                 '90_zone_beginn': (49, 206, 49),
+                 'ende_10_zone': (56, 199, 56),
+                 'ende_20_zone': (63, 192, 63),
+                 'ende_40_zone': (70, 185, 70),
+                 'ende_50_zone': (77, 178, 77),
+                 'ende_60_zone': (84, 171, 84),
+                 'ende_70_zone': (91, 164, 91),
+                 'ende_80_zone': (98, 157, 98),
+                 'ende_90_zone': (105, 150, 105),
+                 'stvo-108-10': (112, 143, 112),
+                 'stvo-110-10': (119, 136, 119),
+                 'stvo-205': (126, 129, 126),
+                 'stvo-206': (133, 122, 133),
+                 'stvo-208': (140, 115, 140),
+                 'stvo-209-10': (147, 108, 147),
+                 'stvo-209-20': (154, 101, 154),
+                 'stvo-222': (161, 94, 161),
+                 'stvo-274.1': (168, 87, 168),
+                 'stvo-274.2': (175, 80, 175),
+                 'stvo-306': (182, 73, 182),
+                 'stvo-350-10': (189, 66, 189),
+                 'stvo-625-10': (196, 59, 196),
+                 'stvo-625-11': (203, 52, 203),
+                 'stvo-625-20': (210, 45, 210),
+                 'stvo-625-21': (217, 38, 217)}
 
 INTERSECTION_COLOR = (64, 128, 255)
 
@@ -316,7 +407,8 @@ def convert_to_one_range(color):
     return (color[0]/255, color[1]/255, color[2]/255)
 
 
-lane_classes = [BACKGROUND_COLOR, LANE_MARKING_LEFT_SIDE, LANE_MARKING_MIDDLE, LANE_MARKING_RIGHT_SIDE]
+lane_classes = [BACKGROUND_COLOR, LANE_MARKING_LEFT_SIDE,
+                LANE_MARKING_MIDDLE, LANE_MARKING_RIGHT_SIDE]
 
 all_classes = [
     BACKGROUND_COLOR,
@@ -361,8 +453,10 @@ def save_dataset_rescaled():
         new_image_name = image_name.replace('rgb', 'rgb_downscaled')
         if not os.path.exists(os.path.dirname(new_image_name)):
             os.mkdir(os.path.dirname(new_image_name))
-            print('Saving rescaled images to: ', os.path.dirname(new_image_name))
-            os.mkdir(os.path.dirname(image_name.replace('rgb', 'lane_segmentation_downscaled')))
+            print('Saving rescaled images to: ',
+                  os.path.dirname(new_image_name))
+            os.mkdir(os.path.dirname(image_name.replace(
+                'rgb', 'lane_segmentation_downscaled')))
             print('Saving rescaled segmentation to: ', os.path.dirname(
                 image_name.replace('rgb', 'lane_segmentation_downscaled')))
 
@@ -374,7 +468,8 @@ def save_dataset_rescaled():
         for ix, color in enumerate(resave_loader.classes):
             r = (target == ix)
             seg_map[r] = color
-        cv2.imwrite(image_name.replace('rgb', 'lane_segmentation_downscaled'), seg_map)
+        cv2.imwrite(image_name.replace(
+            'rgb', 'lane_segmentation_downscaled'), seg_map)
 
 
 if __name__ == '__main__':
