@@ -56,6 +56,7 @@ class PhoenixDataSet(Dataset):
         self.transform = transform
 
         self.classes = all_classes if self.seg_mode == 'default' else lane_classes
+        self.class_names = class_names if self.seg_mode == 'default' else lane_class_names
         self.height_crop = None
 
         self.reshape_size = reshape_size
@@ -251,7 +252,8 @@ class RealPhoenixDataSet(Dataset):
         self.eval = True
         self.visualize = visualize
         self.transform = None
-        self.classes = all_classes if self.seg_mode == 'default' else lane_classes
+        self.classes = all_classes if self.seg_mode == 'default' else lane_classes_visualization
+        self.class_names = class_names if self.seg_mode == 'default' else lane_class_names
         self.center_crop_size = 1270  # approximate size of the lens region in image
         self.reshape_size = reshape_size
         self.mean = [0.09157813, 0.09577893, 0.09694287]
@@ -407,8 +409,16 @@ def convert_to_one_range(color):
     return (color[0]/255, color[1]/255, color[2]/255)
 
 
+LANE_MARKING_LEFT_SIDE_VIS = (255, 0, 0)
+LANE_MARKING_MIDDLE_VIS = (0, 255, 0)
+LANE_MARKING_RIGHT_SIDE_VIS = (0, 0, 255)
+
 lane_classes = [BACKGROUND_COLOR, LANE_MARKING_LEFT_SIDE,
                 LANE_MARKING_MIDDLE, LANE_MARKING_RIGHT_SIDE]
+lane_classes_visualization = [BACKGROUND_COLOR,
+                              LANE_MARKING_LEFT_SIDE_VIS, LANE_MARKING_MIDDLE_VIS, LANE_MARKING_RIGHT_SIDE_VIS]
+lane_class_names = ['Background', 'Left_Marking',
+                    'Middle_Marking', 'Right_Marking']
 
 all_classes = [
     BACKGROUND_COLOR,

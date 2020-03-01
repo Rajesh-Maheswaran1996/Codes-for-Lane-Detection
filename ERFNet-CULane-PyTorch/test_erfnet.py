@@ -213,7 +213,7 @@ def test(loader, model, criterion, iter, evaluator, logger=None, num_class=4, ba
                 prob_map = (pred[cnt][num+1]*255).astype(int)
                 save_img = cv2.blur(prob_map, (9, 9))
                 cv2.imwrite(os.path.join('predicts', loader.dataset.name,
-                                         img_name[cnt].rsplit('.')[0] + str(num+1) + '_avg.png'), save_img)
+                                         img_name[cnt].rsplit('.')[0] + '_' + loader.dataset.class_names[num] + '_avg.png'), save_img)
                 if pred_exist[cnt][num] > 0.5:
                     file_exist.write('1 ')
                 else:

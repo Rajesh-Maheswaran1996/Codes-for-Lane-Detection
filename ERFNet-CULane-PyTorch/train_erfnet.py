@@ -21,7 +21,8 @@ def main():
     global args, best_mIoU
     args = parser.parse_args()
 
-    os.environ["CUDA_VISIBLE_DEVICES"] = ','.join(str(gpu) for gpu in args.gpus)
+    os.environ["CUDA_VISIBLE_DEVICES"] = ','.join(
+        str(gpu) for gpu in args.gpus)
     args.gpus = len(args.gpus)
 
     if args.dataset == 'VOCAug' or args.dataset == 'VOC2012' or args.dataset == 'COCO':
@@ -49,14 +50,15 @@ def main():
     input_std = model.input_std
     model = torch.nn.DataParallel(model, device_ids=range(args.gpus)).cuda()
 
-    def load_my_state_dict(model, state_dict):  # custom function to load model when not all dict elements
+    # custom function to load model when not all dict elements
+    def load_my_state_dict(model, state_dict):
         own_state = model.state_dict()
         ckpt_name = []
         cnt = 0
         for name, param in state_dict.items():
             if name not in list(own_state.keys()) or 'output_conv' in name:
-                 ckpt_name.append(name)
-                 continue
+                ckpt_name.append(name)
+                continue
             own_state[name].copy_(param)
             cnt += 1
         print('#reused param: {}'.format(cnt))
@@ -69,7 +71,8 @@ def main():
             args.start_epoch = checkpoint['epoch']
             model = load_my_state_dict(model, checkpoint['state_dict'])
             # torch.nn.Module.load_state_dict(model, checkpoint['state_dict'])
-            print(("=> loaded checkpoint '{}' (epoch {})".format(args.evaluate, checkpoint['epoch'])))
+            print(("=> loaded checkpoint '{}' (epoch {})".format(
+                args.evaluate, checkpoint['epoch'])))
         else:
             print(("=> no checkpoint found at '{}'".format(args.resume)))
 
@@ -83,39 +86,43 @@ def main():
     input_std = train_dataset.input_std
 
     train_transform = torchvision.transforms.Compose([tf.GroupRandomScale(size=(0.595, 0.621), interpolation=(
-                                                                                              cv2.INTER_LINEAR,
-                                                                                              cv2.INTER_NEAREST)),
-                                                                          tf.GroupRandomCropRatio(
-                                                                              size=(args.img_width, args.img_height)),
-                                                                          tf.GroupRandomRotation(degree=(-1, 1),
-                                                                                                 interpolation=(
-                                                                                                 cv2.INTER_LINEAR,
-                                                                                                 cv2.INTER_NEAREST),
-                                                                                                 padding=(input_mean, (
-                                                                                                 ignore_label,))),
-                                                                          tf.GroupNormalize(mean=(input_mean, (0,)),
-                                                                                            std=(input_std, (1,))),
-                                                                      ])
+        cv2.INTER_LINEAR,
+        cv2.INTER_NEAREST)),
+        tf.GroupRandomCropRatio(
+        size=(args.img_width, args.img_height)),
+        tf.GroupRandomRotation(degree=(-1, 1),
+                               interpolation=(
+            cv2.INTER_LINEAR,
+            cv2.INTER_NEAREST),
+        padding=(input_mean, (
+            ignore_label,))),
+        tf.GroupNormalize(mean=(input_mean, (0,)),
+                          std=(input_std, (1,))),
+    ])
 
     # Data loading code
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
                                                num_workers=args.workers, pin_memory=False, drop_last=True)
     val_transform = torchvision.transforms.Compose([
-            tf.GroupRandomScale(size=(0.595, 0.621), interpolation=(cv2.INTER_LINEAR, cv2.INTER_NEAREST)),
-            tf.GroupRandomCropRatio(size=(args.img_width, args.img_height)),
-            tf.GroupNormalize(mean=(input_mean, (0, )), std=(input_std, (1, ))),
-        ])
-    val_dataset = getattr(ds, args.dataset.replace("CULane", "VOCAug") + 'DataSet')(data_list=args.val_list, transform=val_transform)
-    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers, pin_memory=False)
-
+        tf.GroupRandomScale(size=(0.595, 0.621), interpolation=(
+            cv2.INTER_LINEAR, cv2.INTER_NEAREST)),
+        tf.GroupRandomCropRatio(size=(args.img_width, args.img_height)),
+        tf.GroupNormalize(mean=(input_mean, (0, )), std=(input_std, (1, ))),
+    ])
+    val_dataset = getattr(ds, args.dataset.replace(
+        "CULane", "VOCAug") + 'DataSet')(data_list=args.val_list, transform=val_transform)
+    val_loader = torch.utils.data.DataLoader(
+        val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers, pin_memory=False)
 
     # define loss function (criterion) optimizer and evaluator
     weights = [1.0 for _ in range(num_class)]
     weights[0] = 0.4
     class_weights = torch.FloatTensor(weights).cuda()
-    criterion = torch.nn.NLLLoss(ignore_index=ignore_label, weight=class_weights).cuda()
+    criterion = torch.nn.NLLLoss(
+        ignore_index=ignore_label, weight=class_weights).cuda()
     criterion_exist = torch.nn.BCEWithLogitsLoss().cuda()
-    optimizer = torch.optim.SGD(model.parameters(), args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+    optimizer = torch.optim.SGD(model.parameters(
+    ), args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
     evaluator = EvalSegmentation(num_class, ignore_label)
 
     save_checkpoint({
@@ -133,11 +140,13 @@ def main():
         adjust_learning_rate(optimizer, epoch, args.lr_steps)
 
         # train for one epoch
-        train(train_loader, model, criterion, criterion_exist, optimizer, epoch)
+        train(train_loader, model, criterion,
+              criterion_exist, optimizer, epoch)
 
         # evaluate on validation set
         if (epoch + 1) % args.eval_freq == 0 or epoch == args.epochs - 1:
-            mIoU = validate(val_loader, model, criterion, (epoch + 1) * len(train_loader), evaluator)
+            mIoU = validate(val_loader, model, criterion,
+                            (epoch + 1) * len(train_loader), evaluator)
             # remember best mIoU and save checkpoint
             is_best = mIoU > best_mIoU
             best_mIoU = max(mIoU, best_mIoU)
@@ -156,61 +165,88 @@ def train_domain_adversarial(train_loader_source, train_loader_target, model, cr
     losses = AverageMeter()
     losses_exist = AverageMeter()
 
-    # todo: check whether needs logits, probably it's not logits actually
     criterion_discriminator = torch.nn.BCEWithLogitsLoss().cuda()
-    losses_discriminator_source = AverageMeter()
-    losses_discriminator_target = AverageMeter()
+    num_discriminators = 1
+    losses_discriminator_source = [AverageMeter()] * num_discriminators
+    losses_discriminator_target = [AverageMeter()] * num_discriminators
 
     latent_discriminator = NLayerDiscriminator(num_input_channels)
-    upscaling_model = ReconstructionNetwork()
+    loss_factor_upscaling_models = [0.1]
+    upscaling_models = [ReconstructionNetwork()]
 
     # switch to train mode
     model.train()
 
     end = time.time()
-    for i, (input, target, target_exist, _, input_target) in enumerate(zip(train_loader_source, train_loader_target)):
+    for i, (source_input, source_gt, source_exist, _, target_input) in enumerate(zip(train_loader_source, train_loader_target)):
         # measure data loading time
         data_time.update(time.time() - end)
 
         target = target.cuda()
         target_exist = target_exist.float().cuda()
-        input_var = torch.autograd.Variable(input)
-        target_var = torch.autograd.Variable(target)
-        target_exist_var = torch.autograd.Variable(target_exist)
-        input_var_target = torch.autograd.Variable(input_target)
+        source_input_var = torch.autograd.Variable(source_input)
+        source_gt_var = torch.autograd.Variable(source_gt)
+        source_exist_var = torch.autograd.Variable(source_exist)
+        target_input_var = torch.autograd.Variable(target_input)
 
         # compute output
-        output, output_exist = model(input_var)  # output_mid
-        loss = criterion(torch.nn.functional.log_softmax(output, dim=1), target_var)
+        source_output, source_output_exist, source_intermediate = model(
+            source_input_var)
+        _, _, target_intermediate = model(target_input_var)
+
+        # feature losses in source domain
+        source_seg_loss = criterion(torch.nn.functional.log_softmax(
+            source_output, dim=1), source_gt_var)
         # print(output_exist.data.cpu().numpy().shape)
-        loss_exist = criterion_exist(output_exist, target_exist_var)
-        loss_tot = loss + loss_exist * 0.1
+        source_exist_loss = criterion_exist(
+            source_output_exist, source_exist_var)
+        loss_total = source_seg_loss + source_exist_loss * 0.1
+        loss_discriminator_adv = 0.0
 
         # losses for the feature discriminator
-        source_feature_map = model[adversarial_feature_maps](input_var)
-        target_feature_map = model[adversarial_feature_maps](input_var_target)
-        source_upscaled = upscaling_model(source_feature_map)
-        target_upscaled = upscaling_model(target_feature_map)
-        source_classification = latent_discriminator(source_upscaled)
-        target_classification = latent_discriminator(target_upscaled)
+        for idx, source_intermediate_var, target_intermediate_var, upscaling_model in enumerate(zip(source_intermediate, target_intermediate, upscaling_models)):
+            if upscaling_model is None:
+                source_upscaled_var = upscaling_model(source_intermediate_var)
+                target_upscaled_var = upscaling_model(target_intermediate_var)
+            else:
+                source_upscaled_var = source_intermediate_var
+                target_upscaled_var = target_intermediate_var
 
-        source_gt = torch.ones(source_classification.shape, dtype=torch.float64, device=cuda0)
-        target_gt = torch.zeros(target_classification.shape, dtype=torch.float64, device=cuda0)
-        loss_source_discriminator = criterion_discriminator(source_classification, source_gt)
-        loss_target_discriminator = criterion_discriminator(target_classification, target_gt)
-        loss_generator_source = criterion_discriminator(source_classification, target_gt)
-        loss_generator_target = criterion_discriminator(target_classification, source_gt)
+            source_classification_var = latent_discriminator(
+                source_upscaled_var)
+            target_classification_var = latent_discriminator(
+                target_upscaled_var)
+
+            source_domain_gt = torch.ones(source_classification_var.shape,
+                                          dtype=torch.float64, device=cuda0)
+            target_domain_gt = torch.zeros(
+                target_classification_var.shape, dtype=torch.float64, device=cuda0)
+            loss_source_discriminator = criterion_discriminator(
+                source_classification_var, source_domain_gt)
+            loss_target_discriminator = criterion_discriminator(
+                target_classification_var, target_domain_gt)
+            loss_generator_source = criterion_discriminator(
+                source_classification_var, target_domain_gt)
+            loss_generator_target = criterion_discriminator(
+                target_classification_var, source_domain_gt)
+
+            losses_discriminator_source[idx].update(
+                loss_source_discriminator.item(), source_input.size(0))
+            losses_discriminator_target[idx].update(
+                loss_target_discriminator.item(), source_input.size(0))
+            loss_total += loss_source_discriminator * \
+                loss_factor_upscaling_models[idx]
+            loss_discriminator_adv += loss_factor_upscaling_models[idx] * (
+                loss_generator_source + loss_generator_target)
 
         # measure accuracy and record loss
-        losses.update(loss.data.item(), input.size(0))
-        losses_exist.update(loss_exist.item(), input.size(0))
-
-        losses_discriminator_source.update(loss_discriminator_source.item(), item.size(0))
-        losses_discriminator_target.update(loss_discriminator_target.item(), input)
+        losses.update(source_seg_loss.data.item(), source_input.size(0))
+        losses_exist.update(source_exist_loss.item(), source_input.size(0))
 
         # compute gradient and do SGD step
         optimizer.zero_grad()
-        loss_tot.backward()
+        loss_total.backward()
+        loss_discriminator_adv.backward()
         optimizer.step()
 
         # measure elapsed time
@@ -219,9 +255,9 @@ def train_domain_adversarial(train_loader_source, train_loader_target, model, cr
 
         if (i + 1) % args.print_freq == 0:
             print((
-                      'Epoch: [{0}][{1}/{2}], lr: {lr:.5f}\t' 'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t' 'Data {data_time.val:.3f} ({data_time.avg:.3f})\t' 'Loss {loss.val:.4f} ({loss.avg:.4f})\t' 'Loss_exist {loss_exist.val:.4f} ({loss_exist.avg:.4f})\t'.format(
-                          epoch, i, len(train_loader), batch_time=batch_time, data_time=data_time, loss=losses,
-                          loss_exist=losses_exist, lr=optimizer.param_groups[-1]['lr'])))
+                'Epoch: [{0}][{1}/{2}], lr: {lr:.5f}\t' 'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t' 'Data {data_time.val:.3f} ({data_time.avg:.3f})\t' 'Loss {loss.val:.4f} ({loss.avg:.4f})\t' 'Loss_exist {loss_exist.val:.4f} ({loss_exist.avg:.4f})\t'.format(
+                    epoch, i, len(train_loader), batch_time=batch_time, data_time=data_time, loss=losses,
+                    loss_exist=losses_exist, lr=optimizer.param_groups[-1]['lr'])))
             batch_time.reset()
             data_time.reset()
             losses.reset()
@@ -249,7 +285,8 @@ def train(train_loader, model, criterion, criterion_exist, optimizer, epoch):
 
         # compute output
         output, output_exist = model(input_var)  # output_mid
-        loss = criterion(torch.nn.functional.log_softmax(output, dim=1), target_var)
+        loss = criterion(torch.nn.functional.log_softmax(
+            output, dim=1), target_var)
         # print(output_exist.data.cpu().numpy().shape)
         loss_exist = criterion_exist(output_exist, target_exist_var)
         loss_tot = loss + loss_exist * 0.1
@@ -269,9 +306,9 @@ def train(train_loader, model, criterion, criterion_exist, optimizer, epoch):
 
         if (i + 1) % args.print_freq == 0:
             print((
-                      'Epoch: [{0}][{1}/{2}], lr: {lr:.5f}\t' 'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t' 'Data {data_time.val:.3f} ({data_time.avg:.3f})\t' 'Loss {loss.val:.4f} ({loss.avg:.4f})\t' 'Loss_exist {loss_exist.val:.4f} ({loss_exist.avg:.4f})\t'.format(
-                          epoch, i, len(train_loader), batch_time=batch_time, data_time=data_time, loss=losses,
-                          loss_exist=losses_exist, lr=optimizer.param_groups[-1]['lr'])))
+                'Epoch: [{0}][{1}/{2}], lr: {lr:.5f}\t' 'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t' 'Data {data_time.val:.3f} ({data_time.avg:.3f})\t' 'Loss {loss.val:.4f} ({loss.avg:.4f})\t' 'Loss_exist {loss_exist.val:.4f} ({loss_exist.avg:.4f})\t'.format(
+                    epoch, i, len(train_loader), batch_time=batch_time, data_time=data_time, loss=losses,
+                    loss_exist=losses_exist, lr=optimizer.param_groups[-1]['lr'])))
             batch_time.reset()
             data_time.reset()
             losses.reset()
@@ -282,7 +319,7 @@ def flip(x, dim):
     dim = x.dim() + dim if dim < 0 else dim
     x = x.view(-1, *xsize[dim:])
     x = x.view(x.size(0), x.size(1), -1)[:,
-        getattr(torch.arange(x.size(1) - 1, -1, -1), ('cpu', 'cuda')[x.is_cuda])().long(), :]
+                                         getattr(torch.arange(x.size(1) - 1, -1, -1), ('cpu', 'cuda')[x.is_cuda])().long(), :]
     return x.view(xsize)
 
 
@@ -302,7 +339,8 @@ def validate(val_loader, model, criterion, iter, evaluator, logger=None):
 
         # compute output
         output, _ = model(input_var)
-        loss = criterion(torch.nn.functional.log_softmax(output, dim=1), target_var)
+        loss = criterion(torch.nn.functional.log_softmax(
+            output, dim=1), target_var)
 
         # measure accuracy and record loss
 
@@ -317,14 +355,18 @@ def validate(val_loader, model, criterion, iter, evaluator, logger=None):
 
         if (i + 1) % args.print_freq == 0:
             acc = np.sum(np.diag(IoU.sum)) / float(np.sum(IoU.sum))
-            mIoU = np.diag(IoU.sum) / (1e-20 + IoU.sum.sum(1) + IoU.sum.sum(0) - np.diag(IoU.sum))
+            mIoU = np.diag(IoU.sum) / (1e-20 + IoU.sum.sum(1) +
+                                       IoU.sum.sum(0) - np.diag(IoU.sum))
             mIoU = np.sum(mIoU) / len(mIoU)
-            print(('Test: [{0}/{1}]\t' 'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t' 'Loss {loss.val:.4f} ({loss.avg:.4f})\t' 'Pixels Acc {acc:.3f}\t' 'mIoU {mIoU:.3f}'.format(i, len(val_loader), batch_time=batch_time, loss=losses, acc=acc, mIoU=mIoU)))
+            print(('Test: [{0}/{1}]\t' 'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t' 'Loss {loss.val:.4f} ({loss.avg:.4f})\t' 'Pixels Acc {acc:.3f}\t' 'mIoU {mIoU:.3f}'.format(
+                i, len(val_loader), batch_time=batch_time, loss=losses, acc=acc, mIoU=mIoU)))
 
     acc = np.sum(np.diag(IoU.sum)) / float(np.sum(IoU.sum))
-    mIoU = np.diag(IoU.sum) / (1e-20 + IoU.sum.sum(1) + IoU.sum.sum(0) - np.diag(IoU.sum))
+    mIoU = np.diag(IoU.sum) / (1e-20 + IoU.sum.sum(1) +
+                               IoU.sum.sum(0) - np.diag(IoU.sum))
     mIoU = np.sum(mIoU) / len(mIoU)
-    print(('Testing Results: Pixels Acc {acc:.3f}\tmIoU {mIoU:.3f} ({bestmIoU:.4f})\tLoss {loss.avg:.5f}'.format(acc=acc, mIoU=mIoU, bestmIoU=max(mIoU, best_mIoU), loss=losses)))
+    print(('Testing Results: Pixels Acc {acc:.3f}\tmIoU {mIoU:.3f} ({bestmIoU:.4f})\tLoss {loss.avg:.5f}'.format(
+        acc=acc, mIoU=mIoU, bestmIoU=max(mIoU, best_mIoU), loss=losses)))
 
     return mIoU
 
@@ -332,10 +374,12 @@ def validate(val_loader, model, criterion, iter, evaluator, logger=None):
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
     if not os.path.exists('trained'):
         os.makedirs('trained')
-    filename = os.path.join('trained', '_'.join((args.snapshot_pref, args.method.lower(), filename)))
+    filename = os.path.join('trained', '_'.join(
+        (args.snapshot_pref, args.method.lower(), filename)))
     torch.save(state, filename)
     if is_best:
-        best_name = os.path.join('trained', '_'.join((args.snapshot_pref, args.method.lower(), 'model_best.pth.tar')))
+        best_name = os.path.join('trained', '_'.join(
+            (args.snapshot_pref, args.method.lower(), 'model_best.pth.tar')))
         shutil.copyfile(filename, best_name)
 
 
@@ -375,7 +419,8 @@ class EvalSegmentation(object):
         pred = pred.flatten().astype(int)
         locs = (gt != self.ignore_label)
         sumim = gt + pred * self.num_class
-        hs = np.bincount(sumim[locs], minlength=self.num_class ** 2).reshape(self.num_class, self.num_class)
+        hs = np.bincount(sumim[locs], minlength=self.num_class **
+                         2).reshape(self.num_class, self.num_class)
         return hs
 
 
@@ -385,9 +430,9 @@ def adjust_learning_rate(optimizer, epoch, lr_steps):
     decay = ((1 - float(epoch) / args.epochs)**(0.9))
     lr = args.lr * decay
     decay = args.weight_decay
-    
+
     for param_group in optimizer.param_groups:
-        param_group['lr'] = lr 
+        param_group['lr'] = lr
         param_group['weight_decay'] = decay
 
 
