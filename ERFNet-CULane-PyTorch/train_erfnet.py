@@ -212,32 +212,38 @@ def train_domain_adversarial(train_loader_source, train_loader_target, model, cr
                 source_upscaled_var = source_intermediate_var
                 target_upscaled_var = target_intermediate_var
 
-            source_classification_var = latent_discriminator(
-                source_upscaled_var)
-            target_classification_var = latent_discriminator(
-                target_upscaled_var)
+            detached_source_var = source_upscaled_var.detach()
+            detached_target_var = target_upscaled_var.detach()
 
-            source_domain_gt = torch.ones(source_classification_var.shape,
+            with torch.no_grad():
+                source_classification_var_generator = latent_discriminator(
+                    source_upscaled_var)
+                target_classification_var_generator = latent_discriminator(
+                    target_upscaled_var)
+
+            source_classification_var_discriminator = latent_discriminator(detached_source_var)
+            target_classification_var_discriminator = latent_discriminator(detached_target_var)
+
+            source_domain_gt = torch.ones(source_classification_var_discriminator.shape,
                                           dtype=torch.float64, device=cuda0)
             target_domain_gt = torch.zeros(
-                target_classification_var.shape, dtype=torch.float64, device=cuda0)
+                target_classification_var_discriminator.shape, dtype=torch.float64, device=cuda0)
             loss_source_discriminator = criterion_discriminator(
-                source_classification_var, source_domain_gt)
+                source_classification_var_discriminator, source_domain_gt)
             loss_target_discriminator = criterion_discriminator(
-                target_classification_var, target_domain_gt)
+                target_classification_var_discriminator, target_domain_gt)
             loss_generator_source = criterion_discriminator(
-                source_classification_var, target_domain_gt)
+                source_classification_var_generator, target_domain_gt)
             loss_generator_target = criterion_discriminator(
-                target_classification_var, source_domain_gt)
+                target_classification_var_generator, source_domain_gt)
 
             losses_discriminator_source[idx].update(
                 loss_source_discriminator.item(), source_input.size(0))
             losses_discriminator_target[idx].update(
                 loss_target_discriminator.item(), source_input.size(0))
-            loss_total += loss_source_discriminator * \
-                loss_factor_upscaling_models[idx]
+            loss_total += loss_factor_upscaling_models[idx] * (loss_generator_source + loss_generator_target)
             loss_discriminator_adv += loss_factor_upscaling_models[idx] * (
-                loss_generator_source + loss_generator_target)
+                loss_source_discriminator + loss_target_discriminator)
 
         # measure accuracy and record loss
         losses.update(source_seg_loss.data.item(), source_input.size(0))
