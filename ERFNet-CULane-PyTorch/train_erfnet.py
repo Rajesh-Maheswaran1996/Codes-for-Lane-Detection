@@ -85,6 +85,7 @@ def main():
     input_mean = train_dataset.input_mean
     input_std = train_dataset.input_std
 
+    # Data loading code
     train_transform = torchvision.transforms.Compose([tf.GroupRandomScale(size=(0.595, 0.621), interpolation=(
         cv2.INTER_LINEAR,
         cv2.INTER_NEAREST)),
@@ -99,22 +100,19 @@ def main():
         tf.GroupNormalize(mean=(input_mean, (0,)),
                           std=(input_std, (1,))),
     ])
-
-    # Data loading code
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
-                                               num_workers=args.workers, pin_memory=False, drop_last=True)
+    # train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
+    #                                            num_workers=args.workers, pin_memory=False, drop_last=True)
     val_transform = torchvision.transforms.Compose([
         tf.GroupRandomScale(size=(0.595, 0.621), interpolation=(
             cv2.INTER_LINEAR, cv2.INTER_NEAREST)),
         tf.GroupRandomCropRatio(size=(args.img_width, args.img_height)),
         tf.GroupNormalize(mean=(input_mean, (0, )), std=(input_std, (1, ))),
     ])
-    val_dataset = getattr(ds, args.dataset.replace(
-        "CULane", "VOCAug") + 'DataSet')(data_list=args.val_list, transform=val_transform)
-    val_loader = torch.utils.data.DataLoader(
-        val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers, pin_memory=False)
+    # val_loader = torch.utils.data.DataLoader(
+    #     val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers, pin_memory=False)
 
     # define loss function (criterion) optimizer and evaluator
+    train_dataset = 
     weights = [1.0 for _ in range(num_class)]
     weights[0] = 0.4
     class_weights = torch.FloatTensor(weights).cuda()
@@ -140,8 +138,11 @@ def main():
         adjust_learning_rate(optimizer, epoch, args.lr_steps)
 
         # train for one epoch
-        train(train_loader, model, criterion,
-              criterion_exist, optimizer, epoch)
+        if args.mode == 'normal_erf':
+            train(train_loader, model, criterion,
+                criterion_exist, optimizer, epoch)
+        elif args.mode == 'domain_adversarial':
+            train_domain_adversarial(train_loader, model, criterion, criterion_exist, optimizer, epoch)
 
         # evaluate on validation set
         if (epoch + 1) % args.eval_freq == 0 or epoch == args.epochs - 1:
@@ -156,6 +157,17 @@ def main():
                 'state_dict': model.state_dict(),
                 'best_mIoU': best_mIoU,
             }, is_best)
+
+
+def load_dataset(dataset_name):
+    val_dataset = getattr(ds, args.dataset.replace(
+        "CULane", "VOCAug") + 'DataSet')(data_list=args.val_list, transform=val_transform)
+    train_loader = torch.utils.data.DataLoader(dataset_name, batch_size=args.batch_size, shuffle=True,
+                                               num_workers=args.workers, pin_memory=False, drop_last=True)
+    val_dataset = getattr(ds, args.dataset.replace(
+        "CULane", "VOCAug") + 'DataSet')(data_list=args.val_list, transform=val_transform)
+    val_loader = torch.utils.data.DataLoader(
+        val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers, pin_memory=False)
 
 
 def train_domain_adversarial(train_loader_source, train_loader_target, model, criterion, criterion_exist, optimizer,
@@ -381,11 +393,11 @@ def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
     if not os.path.exists('trained'):
         os.makedirs('trained')
     filename = os.path.join('trained', '_'.join(
-        (args.snapshot_pref, args.method.lower(), filename)))
+        (args.snapshot_pref, args.training_method.lower(), args.method.lower(), filename)))
     torch.save(state, filename)
     if is_best:
         best_name = os.path.join('trained', '_'.join(
-            (args.snapshot_pref, args.method.lower(), 'model_best.pth.tar')))
+            (args.snapshot_pref, args.training_method.lower(), args.method.lower(), 'model_best.pth.tar')))
         shutil.copyfile(filename, best_name)
 
 

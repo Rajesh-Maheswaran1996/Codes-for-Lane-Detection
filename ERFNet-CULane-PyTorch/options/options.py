@@ -3,6 +3,7 @@ parser = argparse.ArgumentParser(description="PyTorch implementation of Semantic
 
 parser.add_argument('dataset', type=str, choices=['VOCAug', 'VOC2012', 'COCO', 'Cityscapes', 'ApolloScape', 'CULane', 'Phoenix'])
 parser.add_argument('method', type=str, choices=['FCN', 'DeepLab', 'DeepLab3', 'PSPNet', 'ERFNet'])
+parset.add_argument('training_method', type=str, choices=['domain_adversarial', 'supervised'], default='supervised')
 parser.add_argument('train_list', type=str)
 parser.add_argument('val_list', type=str)
 
